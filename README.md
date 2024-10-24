@@ -11,7 +11,7 @@ Key engine part of Project Hermes - supports data load from flat files into data
 ### Database Setup
 ````
 create database athena_db;
-alter user athena with encrypted password '***';
+create user athena with encrypted password '***';
 grant all privileges on database athena_db to athena;
 ALTER DATABASE athena_db OWNER TO athena;
 GRANT ALL ON SCHEMA public TO athena;
