@@ -1,0 +1,136 @@
+patterns:
+  consignee: 
+    pattern: ams_consignee_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_consignee_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'
+
+  hazmat: 
+    pattern: ams_hazmat_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_hazmat_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'
+
+  hazmatclass: 
+    pattern: ams_hazmatclass_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_hazmatclass_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'
+
+  billgen: 
+    pattern: ams_billgen_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_billgen_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'        
+
+  marksnumbers: 
+    pattern: ams_marksnumbers_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_marksnumbers_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'       
+
+  header: 
+    pattern: ams_header_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_header_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'
+
+  cargodesc: 
+    pattern: ams_cargodesc_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_cargodesc_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'    
+
+  tariff: 
+    pattern: ams_tariff_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_tariff_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'    
+
+  notifyparty: 
+    pattern: ams_notifyparty_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_notifyparty_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'    
+
+  container: 
+    pattern: ams_container_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_container_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'    
+
+  shipper: 
+    pattern: ams_shipper_\d{4}(?:\d{2})?\.(?:csv)$
+    table: ams_shipper_load
+    read_options:
+      csv:
+        encoding: 'utf-8'
+        header: 'infer'
+        keep_default_na: False
+        dtype: 'str'    
+
+  #hazmat:
+  #  pattern: hazmat_\d{4}(?:\d{2})?\.(?:csv|json|xlsx)$
+  #  table: hazmat_data
+  #  read_options:
+  #    csv:
+  #      separators: [',', ';', '\t']  # List of possible separators
+  #      encoding: 'utf-8'
+  #      detect_separator: true        # Optional flag to auto-detect separator
+  #    json:
+  #      orient: 'records'
+  #    xlsx:
+  #      sheet_name: 0
+#
+  #inventory:
+  #  pattern: inventory_\d{4}(?:\d{2})?\.(?:csv|json|xlsx)$
+  #  table: inventory_data
+  #  read_options:
+  #    csv:
+  #      separators: ['|', ',', '\t']  # List of possible separators
+  #      encoding: 'utf-8'
+  #      detect_separator: true        # Optional flag to auto-detect separator
+  #    json:
+  #      orient: 'records'
+  #    xlsx:
+  #      sheet_name: 0

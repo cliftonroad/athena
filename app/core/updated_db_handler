@@ -1,0 +1,221 @@
+import logging
+from datetime import datetime
+from typing import List, Dict, Any, Optional
+from sqlalchemy import create_engine, MetaData, inspect, text, Table, event, insert
+from sqlalchemy.exc import SQLAlchemyError, OperationalError, IntegrityError, DBAPIError
+from sqlalchemy.orm import sessionmaker
+from contextlib import contextmanager
+import time
+import json
+import threading
+from enum import Enum
+from dataclasses import dataclass
+
+class ErrorCategory(Enum):
+    """Categorize different types of database errors"""
+    CONNECTION = "connection"
+    INTEGRITY = "integrity"
+    CONSTRAINT = "constraint"
+    TIMEOUT = "timeout"
+    UNKNOWN = "unknown"
+
+@dataclass
+class FailedRecord:
+    """Store information about failed records"""
+    data: dict
+    error: str
+    timestamp: datetime
+    attempt_count: int
+    error_category: ErrorCategory
+    batch_id: str
+
+class RetryStrategy:
+    """Configurable retry strategy with exponential backoff"""
+    def __init__(self, max_attempts: int = 3, base_delay: float = 1.0, 
+                 max_delay: float = 30.0, exponential_base: float = 2.0):
+        self.max_attempts = max_attempts
+        self.base_delay = base_delay
+        self.max_delay = max_delay
+        self.exponential_base = exponential_base
+
+    def get_delay(self, attempt: int) -> float:
+        """Calculate delay with exponential backoff"""
+        delay = min(
+            self.base_delay * (self.exponential_base ** (attempt - 1)),
+            self.max_delay
+        )
+        # Add small random jitter to prevent thundering herd
+        return delay * (0.9 + 0.2 * random.random())
+
+class ErrorRecoveryHandler:
+    """Handle error recovery and retry logic"""
+    def __init__(self, db_handler):
+        self.db_handler = db_handler
+        self.failed_records: List[FailedRecord] = []
+        self.retry_strategy = RetryStrategy()
+        self.error_counts: Dict[ErrorCategory, int] = {
+            category: 0 for category in ErrorCategory
+        }
+        self._lock = threading.Lock()
+
+    def categorize_error(self, error: Exception) -> ErrorCategory:
+        """Categorize the type of error"""
+        if isinstance(error, OperationalError):
+            if "connection" in str(error).lower():
+                return ErrorCategory.CONNECTION
+            elif "timeout" in str(error).lower():
+                return ErrorCategory.TIMEOUT
+        elif isinstance(error, IntegrityError):
+            return ErrorCategory.INTEGRITY
+        elif "constraint" in str(error).lower():
+            return ErrorCategory.CONSTRAINT
+        return ErrorCategory.UNKNOWN
+
+    def handle_failed_record(self, record: dict, error: Exception, batch_id: str):
+        """Process and store failed record information"""
+        error_category = self.categorize_error(error)
+        
+        with self._lock:
+            self.error_counts[error_category] += 1
+            failed_record = FailedRecord(
+                data=record,
+                error=str(error),
+                timestamp=datetime.now(),
+                attempt_count=1,
+                error_category=error_category,
+                batch_id=batch_id
+            )
+            self.failed_records.append(failed_record)
+            
+        logging.error(f"Record failed - Category: {error_category.value}, "
+                     f"Error: {str(error)}, Batch: {batch_id}")
+
+    async def retry_failed_records(self, table_name: str):
+        """Attempt to retry failed records with exponential backoff"""
+        retried_records = []
+        
+        with self._lock:
+            current_records = self.failed_records.copy()
+            self.failed_records = []
+
+        for record in current_records:
+            if record.attempt_count > self.retry_strategy.max_attempts:
+                logging.error(f"Record exceeded maximum retry attempts: {record}")
+                continue
+
+            delay = self.retry_strategy.get_delay(record.attempt_count)
+            await asyncio.sleep(delay)
+
+            try:
+                # Attempt to insert single record
+                self.db_handler.insert_data(table_name, [record.data])
+                logging.info(f"Successfully retried record from batch {record.batch_id}")
+                retried_records.append(record)
+            except Exception as e:
+                record.attempt_count += 1
+                record.error = str(e)
+                record.timestamp = datetime.now()
+                with self._lock:
+                    self.failed_records.append(record)
+
+        return retried_records
+
+    def get_error_statistics(self) -> Dict[str, Any]:
+        """Get statistics about errors encountered"""
+        return {
+            "error_counts": {cat.value: count 
+                           for cat, count in self.error_counts.items()},
+            "failed_records_count": len(self.failed_records),
+            "retry_attempts": sum(r.attempt_count for r in self.failed_records),
+            "error_categories": {cat.value: len([r for r in self.failed_records 
+                                               if r.error_category == cat])
+                               for cat in ErrorCategory}
+        }
+
+class DatabaseHandler:
+    def __init__(self, config):
+        self.config = config
+        self.engine = self._create_engine()
+        self.Session = sessionmaker(bind=self.engine)
+        self.metadata = MetaData()
+        self.error_recovery = ErrorRecoveryHandler(self)
+        
+    # ... (previous DatabaseHandler methods remain the same)
+
+    def insert_data(self, table_name: str, data: List[Dict], batch_size: int = 1000):
+        """Enhanced insert_data method with error recovery"""
+        if not data:
+            logging.warning("No data provided for insertion")
+            return
+            
+        total_records = len(data)
+        batch_id = f"batch_{int(time.time())}_{total_records}"
+        logging.info(f"Starting insertion of {total_records} records, batch ID: {batch_id}")
+        
+        # Validate and prepare data
+        prepared_data = self.validate_and_prepare_data(table_name, data)
+        
+        # Get table object
+        table = Table(table_name, self.metadata, autoload_with=self.engine)
+        
+        successful_records = 0
+        failed_records = []
+        
+        with self.session_scope() as session:
+            for i in range(0, total_records, batch_size):
+                batch = prepared_data[i:i + batch_size]
+                retry_attempt = 0
+                
+                while retry_attempt < self.error_recovery.retry_strategy.max_attempts:
+                    try:
+                        stmt = insert(table).values(batch)
+                        session.execute(stmt)
+                        session.flush()
+                        successful_records += len(batch)
+                        logging.info(f"Successfully inserted batch {i//batch_size + 1}")
+                        break
+                    
+                    except Exception as e:
+                        retry_attempt += 1
+                        error_category = self.error_recovery.categorize_error(e)
+                        
+                        if error_category in [ErrorCategory.CONNECTION, ErrorCategory.TIMEOUT]:
+                            # Retry the entire batch
+                            delay = self.error_recovery.retry_strategy.get_delay(retry_attempt)
+                            logging.warning(f"Retrying batch after {delay}s delay...")
+                            time.sleep(delay)
+                            continue
+                        
+                        else:
+                            # Handle individual record failures
+                            logging.error(f"Processing individual records in failed batch...")
+                            for record in batch:
+                                try:
+                                    stmt = insert(table).values([record])
+                                    session.execute(stmt)
+                                    session.flush()
+                                    successful_records += 1
+                                except Exception as record_error:
+                                    self.error_recovery.handle_failed_record(
+                                        record, record_error, batch_id
+                                    )
+                            break
+
+        # Log final statistics
+        stats = {
+            "total_records": total_records,
+            "successful_records": successful_records,
+            "failed_records": len(self.error_recovery.failed_records),
+            "error_statistics": self.error_recovery.get_error_statistics()
+        }
+        
+        logging.info(f"Insertion completed. Statistics: {json.dumps(stats, indent=2)}")
+        return stats
+
+    async def retry_failed_insertions(self, table_name: str):
+        """Retry previously failed insertions"""
+        return await self.error_recovery.retry_failed_records(table_name)
+
+    def get_error_statistics(self):
+        """Get current error statistics"""
+        return self.error_recovery.get_error_statistics()

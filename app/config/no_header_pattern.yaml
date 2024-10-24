@@ -1,0 +1,67 @@
+database:
+  type: postgres
+  host: localhost
+  port: 5432
+  database: your_db
+  user: your_user
+  password: your_password
+
+csv_mappings:
+  ams_consignee_load:  # table name
+    file_config:
+      has_header: false
+      delimiter: ","
+      encoding: "utf-8"
+    column_mappings:
+      - column_index: 0
+        db_column: "identifier"
+        data_type: "string"
+        required: true
+      - column_index: 1
+        db_column: "consignee_name"
+        data_type: "string"
+        required: true
+      - column_index: 2
+        db_column: "consignee_address_1"
+        data_type: "string"
+        required: false
+      - column_index: 3
+        db_column: "consignee_address_2"
+        data_type: "string"
+        required: false
+      - column_index: 4
+        db_column: "consignee_address_3"
+        data_type: "string"
+        required: false
+      - column_index: 5
+        db_column: "consignee_address_4"
+        data_type: "string"
+        required: false
+      - column_index: 6
+        db_column: "city"
+        data_type: "string"
+        required: false
+      - column_index: 7
+        db_column: "state_province"
+        data_type: "string"
+        required: false
+      - column_index: 8
+        db_column: "zip_code"
+        data_type: "string"
+        required: false
+      - column_index: 9
+        db_column: "country_code"
+        data_type: "string"
+        required: false
+      - column_index: 10
+        db_column: "contact_name"
+        data_type: "string"
+        required: false
+      - column_index: 11
+        db_column: "comm_number_qualifier"
+        data_type: "string"
+        required: false
+      - column_index: 12
+        db_column: "comm_number"
+        data_type: "string"
+        required: false
